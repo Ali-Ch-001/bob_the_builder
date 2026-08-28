@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+# Release Commander — shell entry point.
+#
+# Runs the release-commander CLI without requiring installation: it points
+# PYTHONPATH at this repository so `release_commander` is importable, then runs
+# `python -m release_commander`. Works whether or not `pip install .` has been run.
+#
+# Usage:
+#   bin/release-commander --repo /path/to/your/repo
+#   bin/release-commander --repo /path/to/your/repo --fix
+
+set -e
+
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PY=python3
+  else
+    PY=python
+  fi
+fi
+
+PYTHONPATH="$DIR${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m release_commander "$@"

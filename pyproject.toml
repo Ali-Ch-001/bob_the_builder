@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "release-commander"
+version = "0.1.0"
+description = "Agentic release-readiness workflow (GO / NO-GO) built on IBM Bob 2.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+release-commander = "release_commander.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["release_commander*"]
