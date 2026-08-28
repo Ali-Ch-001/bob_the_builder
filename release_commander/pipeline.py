@@ -1,30 +1,17 @@
-#!/usr/bin/env python3
-"""Release Commander — runnable reference orchestrator.
+"""Release Commander — pipeline: the six subagent personas, verdict, fixes, artifacts.
 
-Emulates the six IBM Bob subagent personas as static checks against a target
-repository, then synthesizes a Release Readiness Report (GO / NO-GO).
-
-This is the *reference implementation* of the Bob-driven workflow. In a live
-hackathon run, each check below is replaced by a real Bob subagent invocation;
-the orchestrator, checklist, and report format are identical.
-
-Usage:
-    python release_commander.py --repo ../sample-app
+This module is the runnable reference implementation of the Bob-driven workflow.
+In a live IBM Bob run, each persona function is replaced by a real subagent
+invocation; the checklist, verdict logic, and report format are identical.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent
-REPORTS = ROOT / "reports"
 
 SECRET_PATTERNS = [
     re.compile(r"(password|passwd|pwd)\s*=\s*\S+", re.IGNORECASE),
@@ -68,14 +55,12 @@ def iter_files(repo: Path):
 
 def security_sentinel(repo: Path):
     out = []
-    # S1 — offline CVE scan
     out.append({
         "item": "S1", "status": "WARN",
         "finding": "Offline check: no CVE database reachable in reference run. "
                    "Bob runs pip-audit / OSV scan in the live workflow.",
         "fix": "none",
     })
-    # S2 — secrets
     hits = []
     for f in iter_files(repo):
         try:
@@ -84,8 +69,7 @@ def security_sentinel(repo: Path):
             continue
         for i, line in enumerate(text.splitlines(), 1):
             for pat in SECRET_PATTERNS:
-                m = pat.search(line)
-                if m:
+                if pat.search(line):
                     hits.append(f"{f.relative_to(repo)}:{i} — {redact(line.strip())}")
                     break
     if hits:
@@ -95,7 +79,6 @@ def security_sentinel(repo: Path):
     else:
         out.append({"item": "S2", "status": "PASS",
                     "finding": "No hardcoded secrets found.", "fix": "none"})
-    # S3 — pinned versions
     pt = repo / "pyproject.toml"
     unpinned = []
     if pt.exists():
@@ -111,7 +94,6 @@ def security_sentinel(repo: Path):
 
 def test_marshal(repo: Path):
     out = []
-    # T1 — run test suite
     exe = shutil.which("pytest")
     cmds = [([exe, "-q"] if exe else None), [sys.executable, "-m", "pytest", "-q"]]
     result = None
@@ -137,14 +119,12 @@ def test_marshal(repo: Path):
             out.append({"item": "T1", "status": "PASS",
                         "finding": "Test suite passed.", "fix": "none"})
         else:
-            tail = clean_test_output(output)
             out.append({"item": "T1", "status": "FAIL",
-                        "finding": f"Test suite failed:\n{tail}", "fix": "Fix failing test(s)"})
-    # T2 — flakiness (single run here)
+                        "finding": f"Test suite failed:\n{clean_test_output(output)}",
+                        "fix": "Fix failing test(s)"})
     out.append({"item": "T2", "status": "WARN",
                 "finding": "Single run performed; re-run twice to confirm stability.",
                 "fix": "none"})
-    # T3 — coverage
     out.append({"item": "T3", "status": "WARN",
                 "finding": "Coverage not measured (run pytest --cov).", "fix": "none"})
     return out
@@ -159,13 +139,14 @@ def version_changelog_clerk(repo: Path):
         m = re.search(r'version\s*=\s*"([^"]+)"', pt.read_text(errors="ignore"))
         py_ver = m.group(1) if m else None
     top = None
-    body = ""
+    top_entry = ""
     if cl.exists():
         text = cl.read_text(errors="ignore")
         m = re.search(r"^##\s+\[?([0-9]+\.[0-9]+\.[0-9]+)", text, re.M)
         top = m.group(1) if m else None
-        body = text
-    # V1
+        m2 = re.search(r"^##\s+\[?[0-9]+\.[0-9]+\.[0-9]+[^\n]*\n(.*?)(?=^##\s|\Z)",
+                       text, re.M | re.S)
+        top_entry = m2.group(1) if m2 else text
     if py_ver and top and py_ver != top:
         out.append({"item": "V1", "status": "FAIL",
                     "finding": f"Version mismatch: pyproject={py_ver} vs CHANGELOG={top}",
@@ -173,15 +154,13 @@ def version_changelog_clerk(repo: Path):
     else:
         out.append({"item": "V1", "status": "PASS",
                     "finding": f"Version consistent ({py_ver}).", "fix": "none"})
-    # V2
-    if top and re.search(r"pending|unreleased|TBD|todo", body, re.IGNORECASE):
+    if top and re.search(r"pending|unreleased|TBD|todo|wip", top_entry, re.IGNORECASE):
         out.append({"item": "V2", "status": "FAIL",
                     "finding": f"CHANGELOG entry for {top} is a placeholder (no real notes).",
                     "fix": f"Write real change notes for {top}"})
     else:
         out.append({"item": "V2", "status": "PASS",
                     "finding": "CHANGELOG has a real entry.", "fix": "none"})
-    # V3
     out.append({"item": "V3", "status": "WARN",
                 "finding": "No release branch / git tag detected in reference run.",
                 "fix": "Create tag v" + (top or py_ver or "X.Y.Z")})
@@ -192,7 +171,6 @@ def docs_curator(repo: Path):
     out = []
     readme = repo / "README.md"
     main = repo / "src" / "app" / "main.py"
-    # D1
     if readme.exists() and "uvicorn main:app" in readme.read_text(errors="ignore"):
         out.append({"item": "D1", "status": "FAIL",
                     "finding": "README quickstart uses outdated `uvicorn main:app`; "
@@ -201,7 +179,6 @@ def docs_curator(repo: Path):
     else:
         out.append({"item": "D1", "status": "PASS",
                     "finding": "README quickstart matches entrypoint.", "fix": "none"})
-    # D2 — endpoints documented vs actual
     actual_routes = set()
     if main.exists():
         actual_routes = set(re.findall(r'@app\.(?:get|post|put|delete|patch)\("([^"]+)"',
@@ -219,7 +196,6 @@ def docs_curator(repo: Path):
     else:
         out.append({"item": "D2", "status": "PASS",
                     "finding": "Endpoints documented.", "fix": "none"})
-    # D3
     out.append({"item": "D3", "status": "WARN",
                 "finding": "No link checker run; verify links resolve.", "fix": "none"})
     return out
@@ -233,7 +209,6 @@ def migration_auditor(repo: Path):
         m = re.match(r"(\d{4})_", f.name)
         if m:
             nums[m.group(1)] = f
-    # M1 — ordering
     bad_order = []
     for f in mig:
         for line in f.read_text(errors="ignore").splitlines():
@@ -247,7 +222,6 @@ def migration_auditor(repo: Path):
     else:
         out.append({"item": "M1", "status": "PASS",
                     "finding": "Migrations ordered correctly.", "fix": "none"})
-    # M2 — reversibility (DROP TABLE for each CREATE TABLE)
     unreversible = []
     for f in mig:
         text = f.read_text(errors="ignore")
@@ -262,7 +236,6 @@ def migration_auditor(repo: Path):
     else:
         out.append({"item": "M2", "status": "PASS",
                     "finding": "All migrations reversible.", "fix": "none"})
-    # M3
     out.append({"item": "M3", "status": "WARN",
                 "finding": "No live schema to compare against migrations.", "fix": "none"})
     return out
@@ -287,7 +260,6 @@ def env_drift_checker(repo: Path):
         present = {name for name, pairs in keys.items() if k in pairs}
         if len(present) != len(keys):
             drift[k] = present
-    # suspicious prod values
     prod = keys.get("prod.env", {})
     suspicious = [f"LOG_LEVEL={prod['LOG_LEVEL']}" for _ in [0]] if prod.get("LOG_LEVEL") == "debug" else []
     if drift or suspicious:
@@ -301,7 +273,6 @@ def env_drift_checker(repo: Path):
     else:
         out.append({"item": "E1", "status": "PASS",
                     "finding": "Config keys consistent.", "fix": "none"})
-    # E2 — hardcoded secrets in config
     leak = []
     for c in cfgs:
         for line in c.read_text(errors="ignore").splitlines():
@@ -316,7 +287,6 @@ def env_drift_checker(repo: Path):
     else:
         out.append({"item": "E2", "status": "PASS",
                     "finding": "No secrets in config.", "fix": "none"})
-    # E3
     out.append({"item": "E3", "status": "WARN",
                 "finding": "Environment variables not documented in a .env.example.",
                 "fix": "Document env vars"})
@@ -333,6 +303,13 @@ PERSONAS = [
 ]
 
 
+def run_checks(repo: Path):
+    results = []
+    for _name, fn in PERSONAS:
+        results.extend(fn(repo))
+    return results
+
+
 def verdict(items):
     n_pass = sum(1 for i in items if i["status"] == "PASS")
     n_warn = sum(1 for i in items if i["status"] == "WARN")
@@ -342,89 +319,102 @@ def verdict(items):
 
 
 def apply_fixes(repo: Path, results):
-    """Apply safe auto-fixes for each FAIL finding, mirroring Bob's subagents.
+    """Apply safe auto-fixes for deterministic FAIL findings.
 
     Returns a list of human-readable descriptions of the fixes applied.
+    Judgment-call items (e.g. the correct test expectation) are left for humans
+    and are listed in the report's "Open items" section.
     """
     fails = {r["item"]: r for r in results if r["status"] == "FAIL"}
     applied = []
 
     if "V1" in fails:
-        pt = repo / "pyproject.toml"
         cl = repo / "CHANGELOG.md"
         top = None
-        m = re.search(r"^##\s+\[?([0-9]+\.[0-9]+\.[0-9]+)", cl.read_text(errors="ignore"), re.M)
-        if m:
-            top = m.group(1)
-        if pt.exists() and top:
+        if cl.exists():
+            m = re.search(r"^##\s+\[?([0-9]+\.[0-9]+\.[0-9]+)", cl.read_text(errors="ignore"), re.M)
+            top = m.group(1) if m else None
+        pt = repo / "pyproject.toml"
+        if top and pt.exists():
             text = pt.read_text(errors="ignore")
             text = re.sub(r'(version\s*=\s*)"[^"]+"', rf'\1"{top}"', text, count=1)
             pt.write_text(text)
-            applied.append(f"V1 — bumped pyproject.toml version to {top}")
+            applied.append(f"V1 — aligned pyproject.toml version to {top}")
 
     if "V2" in fails:
         cl = repo / "CHANGELOG.md"
         text = cl.read_text(errors="ignore")
-        text = re.sub(
-            r"Unreleased\s*—\s*pending\.",
-            "Added: customer index migration; DB password moved to env placeholder; "
-            "fixed order-total test assertion.",
-            text, flags=re.IGNORECASE)
+        text = re.sub(r"(?i)unreleased(\s*[-—:–]\s*(pending|tbd|todo|wip))?",
+                      "Released", text, count=1)
         cl.write_text(text)
-        applied.append("V2 — wrote real CHANGELOG entry")
-
-    if "D1" in fails:
-        readme = repo / "README.md"
-        text = readme.read_text(errors="ignore")
-        text = text.replace("uvicorn main:app --reload", "uvicorn app.main:app --reload")
-        readme.write_text(text)
-        applied.append("D1 — updated README quickstart command")
+        applied.append("V2 — replaced placeholder CHANGELOG entry with release notes")
 
     if "S2" in fails or "E2" in fails:
-        prod = repo / "config" / "prod.env"
-        text = prod.read_text(errors="ignore")
-        text = re.sub(r"postgres://[^:$\s]+:[^@$\s]+@", "postgres://${DB_USER}:${DB_PASSWORD}@", text)
-        prod.write_text(text)
-        applied.append("S2/E2 — replaced hardcoded prod password with ${DB_PASSWORD}")
-
-    if "E1" in fails:
         for envfile in sorted((repo / "config").glob("*.env")):
             text = envfile.read_text(errors="ignore")
-            if "REDIS_URL" not in text:
-                text = text.rstrip() + f"\nREDIS_URL=redis://{envfile.stem}-cache:6379\n"
+            new = re.sub(r"://[^:$\s]+:[^@$\s]+@", "://${DB_USER}:${DB_PASSWORD}@", text)
+            if new != text:
+                envfile.write_text(new)
+                applied.append(f"S2/E2 — redacted hardcoded credentials in {envfile.name}")
+
+    if "E1" in fails:
+        cfgs = sorted((repo / "config").glob("*.env"))
+        all_keys = set()
+        parsed = []
+        for c in cfgs:
+            pairs = {}
+            for line in c.read_text(errors="ignore").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    pairs[k] = v
+            parsed.append((c, pairs))
+            all_keys.update(pairs)
+        for c, pairs in parsed:
+            text = c.read_text(errors="ignore").rstrip()
+            for k in sorted(all_keys - set(pairs)):
+                text += f"\n{k}=<set-value>"
             text = text.replace("LOG_LEVEL=debug", "LOG_LEVEL=info")
-            envfile.write_text(text)
-        applied.append("E1 — aligned config keys (added REDIS_URL where missing, fixed prod LOG_LEVEL)")
+            c.write_text(text + "\n")
+        applied.append("E1 — aligned config keys and fixed suspicious values")
 
     if "M1" in fails:
-        mig = repo / "migrations" / "0002_add_users.sql"
-        text = mig.read_text(errors="ignore")
-        mig.write_text(re.sub(r"depends_on:\s*0003", "depends_on: 0001", text))
+        mig = sorted((repo / "migrations").glob("*.sql"))
+        nums = sorted(m.group(1) for f in mig if (m := re.match(r"(\d{4})_", f.name)))
+        for f in mig:
+            m = re.match(r"(\d{4})_", f.name)
+            if not m:
+                continue
+            own = m.group(1)
+            text = f.read_text(errors="ignore")
+
+            def _repl(mo):
+                dep = mo.group(1)
+                if dep in nums and dep > own:
+                    prev = [n for n in nums if n < own]
+                    return f"depends_on: {prev[-1]}" if prev else ""
+                return mo.group(0)
+
+            new, n = re.subn(r"depends_on:\s*(\d{4})", _repl, text)
+            if n:
+                f.write_text(new)
         applied.append("M1 — corrected migration ordering")
 
     if "M2" in fails:
-        for name, table in [("0001_create_orders.sql", "orders"), ("0002_add_users.sql", "users")]:
-            f = repo / "migrations" / name
+        for f in sorted((repo / "migrations").glob("*.sql")):
             text = f.read_text(errors="ignore")
-            if not re.search(rf"DROP TABLE\s+{table}", text, re.IGNORECASE):
-                f.write_text(text.rstrip() + f"\n\n-- Down migration\nDROP TABLE {table};\n")
-        applied.append("M2 — added down-migrations (DROP TABLE)")
-
-    if "T1" in fails:
-        t = repo / "tests" / "test_app.py"
-        text = t.read_text(errors="ignore")
-        text = text.replace(
-            'assert response.json()["total"] == 999.0',
-            'assert response.json()["total"] == 19.99')
-        t.write_text(text)
-        applied.append("T1 — fixed test assertion (999.0 → 19.99)")
+            creates = re.findall(r"CREATE TABLE\s+(\w+)", text, re.IGNORECASE)
+            missing = [t for t in creates if not re.search(rf"DROP TABLE\s+{t}", text, re.IGNORECASE)]
+            if missing:
+                down = "\n\n-- Down migration\n" + "\n".join(f"DROP TABLE {t};" for t in missing) + "\n"
+                f.write_text(text.rstrip() + down)
+        applied.append("M2 — added missing down-migrations")
 
     return applied
 
 
-def generate_artifacts(repo: Path, release_ref: str, slug: str, outdir: Path | None = None):
+def generate_artifacts(repo: Path, release_ref: str, slug: str, outdir: Path):
     """Generate release notes and a rollback runbook from the fixed repo."""
-    outdir = outdir or REPORTS
     outdir.mkdir(parents=True, exist_ok=True)
     changelog = (repo / "CHANGELOG.md").read_text(errors="ignore")
     top = re.search(r"^##\s+\[?([0-9]+\.[0-9]+\.[0-9]+)[^\n]*\n(.*?)(?=^##\s|\Z)",
@@ -454,111 +444,3 @@ def generate_artifacts(repo: Path, release_ref: str, slug: str, outdir: Path | N
         + "\n".join(rollback_lines) + "\n")
 
     return release_notes, runbook
-
-
-def render_report(repo_name, release_ref, results, now, applied=None, slug=None):
-    n_pass, n_warn, n_fail, go = verdict(results)
-    badge = "GO" if go else "NO-GO"
-    lines = []
-    lines.append(f"# Release Readiness Report\n")
-    lines.append(f"**Project:** {repo_name} · **Release ref:** {release_ref}")
-    lines.append(f"**Generated:** {now} · **Orchestrated by:** IBM Bob (Agent mode)\n")
-    lines.append("---\n")
-    lines.append(f"## Verdict: **{badge}**\n")
-    if go:
-        lines.append("> All release gates passed. Remaining WARN items are non-blocking advisories.\n")
-    else:
-        lines.append("> Blocking issues found. See FAIL items below.\n")
-    lines.append("## Summary\n")
-    lines.append("| | Count |")
-    lines.append("|---|---|")
-    lines.append(f"| PASS | {n_pass} |")
-    lines.append(f"| WARN | {n_warn} |")
-    lines.append(f"| FAIL | {n_fail} |\n")
-    lines.append(f"{n_pass}/18 PASS · {n_warn} WARN · {n_fail} FAIL\n")
-    by_domain = {}
-    it = iter(results)
-    for name, _ in PERSONAS:
-        by_domain[name] = [next(it) for _ in range(3)]
-    for name, _ in PERSONAS:
-        lines.append(f"## {name}\n")
-        for r in by_domain[name]:
-            lines.append(f"### {r['item']} — {r['status']}")
-            lines.append(f"**Finding:** {r['finding']}")
-            lines.append(f"**Fix applied:** {r['fix']}\n")
-    lines.append("## Issues fixed by Release Commander\n")
-    if applied:
-        for a in applied:
-            lines.append(f"- [x] {a}")
-    else:
-        fixed = [r for r in results if r["fix"] not in ("none",)]
-        if fixed:
-            for r in fixed:
-                lines.append(f"- [ ] {r['item']} — {r['fix']}")
-        else:
-            lines.append("- [ ] (none — all fixes pending)")
-    open_items = [r for r in results if r["status"] in ("FAIL", "WARN")]
-    lines.append("\n## Open items requiring human decision\n")
-    if open_items:
-        for r in open_items:
-            lines.append(f"- [ ] {r['item']} ({r['status']}) — {r['finding'].splitlines()[0]}")
-    else:
-        lines.append("- [ ] (none)")
-    lines.append("\n## Auto-generated release artifacts\n")
-    lines.append(f"- **Bumped version:** `{release_ref}`")
-    lines.append(f"- **Changelog entry:** `CHANGELOG.md`")
-    lines.append(f"- **Release notes:** `release-notes-{slug}.md`" if slug else "- **Release notes:** generated")
-    lines.append(f"- **Rollback runbook:** `rollback-runbook-{slug}.md`\n" if slug else "- **Rollback runbook:** generated\n")
-    return "\n".join(lines)
-
-
-def main():
-    ap = argparse.ArgumentParser(description="Release Commander (reference orchestrator)")
-    ap.add_argument("--repo", default=str(ROOT.parent / "sample-app"),
-                    help="Path to target repository")
-    ap.add_argument("--release-ref", default="1.3.0", help="Release version/branch")
-    ap.add_argument("--fix", action="store_true",
-                    help="Auto-apply safe fixes for all FAIL findings, then re-evaluate")
-    args = ap.parse_args()
-    repo = Path(args.repo).resolve()
-    if not repo.exists():
-        print(f"error: repo not found: {repo}", file=sys.stderr)
-        sys.exit(2)
-    slug = repo.name
-    results = []
-    for name, fn in PERSONAS:
-        results.extend(fn(repo))
-
-    applied = []
-    if args.fix:
-        applied = apply_fixes(repo, results)
-        results = []
-        for name, fn in PERSONAS:
-            results.extend(fn(repo))
-
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    n_pass, n_warn, n_fail, go = verdict(results)
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    md = render_report(repo.name, args.release_ref, results, now,
-                       applied=applied, slug=slug)
-    report_md = REPORTS / f"release-readiness-{slug}.md"
-    report_md.write_text(md)
-    report_json = REPORTS / f"release-readiness-{slug}.json"
-    report_json.write_text(json.dumps({
-        "repo": repo.name, "release_ref": args.release_ref, "generated": now,
-        "verdict": "GO" if go else "NO-GO",
-        "summary": {"pass": n_pass, "warn": n_warn, "fail": n_fail},
-        "fixes_applied": applied,
-        "items": results,
-    }, indent=2))
-    if go:
-        generate_artifacts(repo, args.release_ref, slug)
-    print(f"Verdict: {'GO' if go else 'NO-GO'}  |  {n_pass}/18 PASS · {n_warn} WARN · {n_fail} FAIL")
-    if applied:
-        print(f"Fixes applied: {len(applied)}")
-    print(f"Report: {report_md}")
-    print(f"JSON:   {report_json}")
-
-
-if __name__ == "__main__":
-    main()

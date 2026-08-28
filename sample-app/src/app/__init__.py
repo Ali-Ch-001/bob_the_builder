@@ -1,1 +1,0 @@
-"""Acme Orders application package."""
