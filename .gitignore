@@ -11,6 +11,7 @@ htmlcov/
 # Env / secrets (protect real credentials)
 .env
 *.env
+!sample-app/config/*.env
 !config/*.env.example
 
 # OS / editor
