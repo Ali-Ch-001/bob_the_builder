@@ -16,7 +16,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from release_commander import apply_fixes, run_checks, verdict  # noqa: E402
+from release_commander import (  # noqa: E402
+    apply_fixes,
+    generate_artifacts,
+    run_checks,
+    verdict,
+)
 
 
 def _make_unready_repo(tmp_path: Path) -> Path:
@@ -91,3 +96,29 @@ def test_generated_reports_are_not_scanned_as_source(tmp_path):
     assert "release-readiness-r.md" not in names
     assert "release-notes-r.md" not in names
     assert "real.py" in names
+
+
+def test_empty_repo_is_go_and_artifacts_safe(tmp_path):
+    repo = tmp_path / "empty"
+    repo.mkdir()
+    results = run_checks(repo)
+    n_pass, n_warn, n_fail, go = verdict(results)
+    assert n_fail == 0
+    assert go is True
+    # generate_artifacts must not crash when CHANGELOG.md is absent
+    notes, runbook = generate_artifacts(repo, "HEAD", repo.name, tmp_path)
+    assert notes.exists() and runbook.exists()
+
+
+def test_stale_readme_quickstart_is_fixed(tmp_path):
+    repo = tmp_path / "stale"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text('[project]\nname="x"\nversion="1.0.0"\n')
+    (repo / "CHANGELOG.md").write_text("# Changelog\n\n## [1.0.0]\nRelease.\n")
+    (repo / "README.md").write_text("# X\n\nRun: `uvicorn main:app`.\n")
+    results = run_checks(repo)
+    d1 = next(r for r in results if r["item"] == "D1")
+    assert d1["status"] == "FAIL"
+    apply_fixes(repo, results)
+    d1_after = next(r for r in run_checks(repo) if r["item"] == "D1")
+    assert d1_after["status"] == "PASS"
