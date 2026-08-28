@@ -45,10 +45,26 @@ docs/                       # problem/solution, Bob usage, demo storyboard
 ## Run the reference pipeline
 
 ```bash
+# Diagnose a release (emits a GO / NO-GO report)
 python3 release-commander/release_commander.py --repo sample-app
+
+# Auto-apply safe fixes and re-evaluate (flips NO-GO → GO, generates artifacts)
+python3 release-commander/release_commander.py --repo sample-app --fix
 ```
 
-Emits `release-commander/reports/release-readiness-sample-app.{md,json}`.
+Emits `release-commander/reports/release-readiness-{repo}.{md,json}` and, on GO,
+`release-notes-{repo}.md` + `rollback-runbook-{repo}.md`.
+
+## Test it
+
+```bash
+python -m pytest release-commander/tests/ -v
+```
+
+Requires `pytest`, `fastapi`, `httpx`, `pydantic`
+(`pip install -r sample-app/requirements-dev.txt`). The tests prove the core
+claim: the pipeline detects every seeded defect (NO-GO), then auto-fixes flip
+the verdict to GO.
 
 ## How Bob is used
 
