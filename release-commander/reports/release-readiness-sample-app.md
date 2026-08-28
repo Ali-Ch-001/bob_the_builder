@@ -1,7 +1,7 @@
 # Release Readiness Report
 
 **Project:** sample-app · **Release ref:** 1.3.0
-**Generated:** 2026-08-28T21:11:24Z · **Orchestrated by:** IBM Bob (Agent mode)
+**Generated:** 2026-08-28T21:20:02Z · **Orchestrated by:** IBM Bob (Agent mode)
 
 ---
 
@@ -43,7 +43,7 @@ assert response.status_code == 200
 E       assert 19.99 == 999.0
 tests/test_app.py:36: AssertionError
 FAILED tests/test_app.py::test_create_order_total - assert 19.99 == 999.0
-1 failed, 3 passed in 0.29s
+1 failed, 3 passed in 0.32s
 **Fix applied:** Fix failing test(s)
 
 ### T2 — WARN
@@ -147,7 +147,7 @@ FAILED tests/test_app.py::test_create_order_total - assert 19.99 == 999.0
 
 ## Auto-generated release artifacts
 
-- **Bumped version:** `see V1 fix`
-- **Changelog entry:** `see V2 fix`
-- **Release notes:** generated from changelog
-- **Rollback runbook:** undo steps for each migration/config change
+- **Bumped version:** `1.3.0`
+- **Changelog entry:** `CHANGELOG.md`
+- **Release notes:** `release-notes-sample-app.md`
+- **Rollback runbook:** `rollback-runbook-sample-app.md`
