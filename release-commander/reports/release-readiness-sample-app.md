@@ -1,7 +1,7 @@
 # Release Readiness Report
 
 **Project:** sample-app · **Release ref:** 1.3.0
-**Generated:** 2026-08-28T21:20:02Z · **Orchestrated by:** IBM Bob (Agent mode)
+**Generated:** 2026-08-28T21:24:56Z · **Orchestrated by:** IBM Bob (Agent mode)
 
 ---
 
@@ -43,7 +43,7 @@ assert response.status_code == 200
 E       assert 19.99 == 999.0
 tests/test_app.py:36: AssertionError
 FAILED tests/test_app.py::test_create_order_total - assert 19.99 == 999.0
-1 failed, 3 passed in 0.32s
+1 failed, 3 passed in 0.40s
 **Fix applied:** Fix failing test(s)
 
 ### T2 — WARN
