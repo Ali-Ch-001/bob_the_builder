@@ -7,23 +7,22 @@ hackathon asked us to demonstrate.
 ## Agent mode (orchestrator)
 
 The top-level Bob agent runs in **Agent mode** as the Release Commander
-orchestrator. Its task is defined in [`release-commander/orchestrator.md`](../release-commander/orchestrator.md).
+orchestrator. Its task is defined in [`bob/orchestrator.md`](../bob/orchestrator.md).
 It is prompted to act as a *conductor, not a doer*: it plans the release,
 delegates all six readiness domains, and is the single point of accountability
 for the GO / NO-GO decision. It never inlines the six workstreams — it spawns
 and delegates them.
 
-## Parallel tasks (spawn_subagent)
+## Parallel tasks (subagents)
 
 The six readiness domains are independent, so the orchestrator runs them
-**simultaneously** rather than sequentially using Bob's `spawn_subagent` tool.
-This is the core efficiency win: a release check that would take a human a full
-day of serial effort is compressed to the wall-clock time of the single slowest
-subagent.
+**simultaneously** rather than sequentially. This is the core efficiency win: a
+release check that would take a human a full day of serial effort is compressed
+to the wall-clock time of the single slowest subagent.
 
 ## Six named subagents
 
-Each subagent has a focused role file under [`release-commander/subagents/`](../release-commander/subagents/):
+Each subagent has a focused role file under [`bob/subagents/`](../bob/subagents/):
 
 | Role file | Checklist items | Domain |
 |---|---|---|
@@ -47,43 +46,40 @@ non-reversible migrations that a keyword search would miss.
 ## Synthesis & reporting
 
 Bob merges the six subagent reports into a single Release Readiness Report using
-[`release-commander/report-template.md`](../release-commander/report-template.md),
-applies the verdict rule (GO iff 0 FAIL), and auto-generates four release
-artifacts (bumped version, changelog entry, release notes, rollback runbook).
+[`bob/report-template.md`](../bob/report-template.md), applies the verdict rule
+(GO iff 0 FAIL), and auto-generates four release artifacts (bumped version,
+changelog entry, release notes, rollback runbook).
 
-## Shell skill — one-click install
+## Shell skill
 
-The workflow ships as a directly executable Python script with a proper
-`#!/usr/bin/env python3` shebang, and a Bash installer (`install.sh`) that
-creates a `release-commander` shell command via a symlink. Anyone can install
-and use it without cloning or manually configuring paths:
+The workflow ships as an installable CLI:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Ali-Ch-001/bob_the_builder/main/install.sh)
+pip install .            # installs the `release-commander` command
+# or, no install:
+bin/release-commander --repo /path/to/your/repo
 ```
 
 This means Release Commander works as a reusable **shell skill** — run it
-against any repo, any team, any cadence.
+against any repo, any team, any cadence, and drop it into CI (exit 0 = GO,
+exit 1 = NO-GO).
 
 ## Reference implementation
 
-[`release-commander/release_commander.py`](../release-commander/release_commander.py) is a
-stdlib-only Python orchestrator that emulates the same 18 checks so the
-proof-of-concept runs without a live Bob session. In the live run, each check is
-replaced by a real Bob subagent — the checklist, verdict logic, and report
-format are identical.
+The `release_commander` Python package is a stdlib-only orchestrator that
+emulates the same 18 checks so the proof-of-concept runs without a live Bob
+session. In the live run, each check is replaced by a real Bob subagent — the
+checklist, verdict logic, and report format are identical.
 
 ## Verified results
 
-```
-python -m pytest release-commander/tests/ -v
+```bash
+python -m pytest tests/ -v
 ```
 
 ```
-test_detects_all_seeded_defects      PASSED   # every defect caught → NO-GO
-test_fix_flips_verdict_to_go         PASSED   # auto-fixes flip to GO
-test_report_verdict_reflects_state   PASSED   # markdown report matches state
-test_artifacts_generated_when_go     PASSED   # release notes + runbook written
+test_detects_seeded_defects      PASSED   # every defect caught → NO-GO
+test_fix_flips_verdict_to_go     PASSED   # auto-fixes flip to GO
 ```
 
 ## Bobcoins budget

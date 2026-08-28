@@ -8,11 +8,17 @@ venv/
 .coverage
 htmlcov/
 
+# Build artifacts
+build/
+dist/
+
+# Tool output
+release-commander-reports/
+
 # Env / secrets (protect real credentials)
 .env
 *.env
-!sample-app/config/*.env
-!config/*.env.example
+!.env.example
 
 # OS / editor
 .DS_Store
