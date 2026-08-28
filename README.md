@@ -14,9 +14,9 @@ incident.
 
 ## The solution
 
-Point Bob at a repo and a version. Bob (Agent mode) delegates six readiness
-domains to parallel subagents, each owning three checks (18 total), fixes what it
-can, and synthesizes a Release Readiness Report with a GO / NO-GO verdict.
+Point `release-commander` at any repo and a version. It delegates six readiness
+domains to parallel checks (or live Bob subagents), fixes what it can, and
+synthesizes a Release Readiness Report with a GO / NO-GO verdict.
 
 | Subagent | Owns |
 |---|---|
@@ -27,44 +27,87 @@ can, and synthesizes a Release Readiness Report with a GO / NO-GO verdict.
 | Migration Auditor | M1 order · M2 reversibility · M3 pending |
 | Env Drift Checker | E1 key drift · E2 secrets · E3 flags |
 
+## Proven results (sample-app)
+
+| Stage | Result |
+|---|---|
+| Diagnose unready release | **NO-GO** · 1/18 PASS · 8 WARN · 9 FAIL — all 8 seeded defects caught |
+| Auto-fix + re-evaluate | **GO** · 10/18 PASS · 0 FAIL · 8 fixes applied |
+| Artifacts generated | `release-notes-*.md`, `rollback-runbook-*.md` |
+
+4/4 tests pass:
+```
+test_detects_all_seeded_defects      PASSED   # proves it catches every defect
+test_fix_flips_verdict_to_go         PASSED   # proves NO-GO → GO
+test_report_verdict_reflects_state   PASSED   # report matches state
+test_artifacts_generated_when_go     PASSED   # artifacts real
+```
+
+## Install as a shell command
+
+```bash
+chmod +x install.sh && ./install.sh
+```
+
+This installs a `release-commander` command into `/usr/local/bin` (or `~/bin`
+if not writable without sudo) and installs Python dependencies.
+
+Then point it at any repo:
+
+```bash
+# Diagnose a release — emits GO / NO-GO report
+release-commander --repo /path/to/your/repo
+
+# Auto-apply safe fixes and re-evaluate (flips NO-GO → GO, generates artifacts)
+release-commander --repo /path/to/your/repo --fix
+
+# Specify a release version
+release-commander --repo /path/to/your/repo --release-ref 2.0.0 --fix
+```
+
+Or run without installing:
+
+```bash
+python3 release-commander/release_commander.py --repo /path/to/your/repo
+python3 release-commander/release_commander.py --repo /path/to/your/repo --fix
+```
+
+## Reproduce the demo
+
+```bash
+# 0. Install dependencies
+pip install -r sample-app/requirements-dev.txt
+
+# 1. Prove the pipeline works (4/4 tests)
+python -m pytest release-commander/tests/ -v
+
+# 2. Run against the seeded sample app — expect NO-GO
+release-commander --repo sample-app
+
+# 3. Auto-fix and re-evaluate — expect GO + artifacts
+release-commander --repo sample-app --fix
+```
+
 ## Layout
 
 ```
+install.sh                  # one-command install (creates shell command)
 SPEC.md                     # single source of truth
-sample-app/                 # the repo Release Commander operates on (seeded defects)
+sample-app/                 # FastAPI demo app with 8 seeded defects (test fixture)
 release-commander/
+  release_commander.py      # executable orchestrator (shebang; run directly)
   orchestrator.md           # Bob Agent-mode orchestrator prompt
   subagents/                # six persona role files
   checklist/                # 18-item release checklist
   report-template.md        # GO / NO-GO report template
-  release_commander.py      # runnable reference orchestrator
   reports/                  # generated reports (JSON + Markdown)
+  tests/                    # test suite (4 tests)
 docs/                       # problem/solution, Bob usage, demo storyboard
 ```
 
-## Run the reference pipeline
-
-```bash
-# Diagnose a release (emits a GO / NO-GO report)
-python3 release-commander/release_commander.py --repo sample-app
-
-# Auto-apply safe fixes and re-evaluate (flips NO-GO → GO, generates artifacts)
-python3 release-commander/release_commander.py --repo sample-app --fix
-```
-
-Emits `release-commander/reports/release-readiness-{repo}.{md,json}` and, on GO,
-`release-notes-{repo}.md` + `rollback-runbook-{repo}.md`.
-
-## Test it
-
-```bash
-python -m pytest release-commander/tests/ -v
-```
-
-Requires `pytest`, `fastapi`, `httpx`, `pydantic`
-(`pip install -r sample-app/requirements-dev.txt`). The tests prove the core
-claim: the pipeline detects every seeded defect (NO-GO), then auto-fixes flip
-the verdict to GO.
+> **`sample-app/`** is the test fixture that `release-commander/tests/` runs against.
+> It ships with 8 intentional defects so the demo proves real detection, not mocked results.
+> It is not meant to be deleted — the test suite copies it to a temp directory each run.
 
 ## How Bob is used
 
