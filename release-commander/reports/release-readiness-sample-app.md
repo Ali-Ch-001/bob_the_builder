@@ -1,7 +1,7 @@
 # Release Readiness Report
 
 **Project:** sample-app · **Release ref:** 1.3.0
-**Generated:** 2026-08-28T21:08:24Z · **Orchestrated by:** IBM Bob (Agent mode)
+**Generated:** 2026-08-28T21:11:24Z · **Orchestrated by:** IBM Bob (Agent mode)
 
 ---
 
@@ -27,8 +27,7 @@
 
 ### S2 — FAIL
 **Finding:** Hardcoded credentials detected:
-  config/staging.env:3 — DATABASE_URL=postgres://***:***@staging-db:5432/orders
-  config/prod.env:3 — DATABASE_URL=postgres://***:***@ssw0rd!@prod-db:5432/orders
+  config/prod.env:3 — DATABASE_URL=postgres://***:***@prod-db:5432/orders
 **Fix applied:** Replace with env placeholder ${DB_PASSWORD}
 
 ### S3 — WARN
@@ -39,7 +38,12 @@
 
 ### T1 — FAIL
 **Finding:** Test suite failed:
-/opt/homebrew/opt/python@3.14/bin/python3.14: No module named pytest
+assert response.status_code == 200
+>       assert response.json()["total"] == 999.0
+E       assert 19.99 == 999.0
+tests/test_app.py:36: AssertionError
+FAILED tests/test_app.py::test_create_order_total - assert 19.99 == 999.0
+1 failed, 3 passed in 0.29s
 **Fix applied:** Fix failing test(s)
 
 ### T2 — WARN
@@ -99,7 +103,7 @@
 **Fix applied:** Align config keys/values across environments
 
 ### E2 — FAIL
-**Finding:** Secrets in config: prod.env: DATABASE_URL=postgres://***:***@ssw0rd!@prod-db:5432/orders; staging.env: DATABASE_URL=postgres://***:***@staging-db:5432/orders
+**Finding:** Secrets in config: prod.env: DATABASE_URL=postgres://***:***@prod-db:5432/orders
 **Fix applied:** Move to secret manager / env placeholder
 
 ### E3 — WARN
@@ -138,7 +142,7 @@
 - [ ] M2 (FAIL) — Missing down-migrations: 0001_create_orders.sql (no DROP TABLE orders); 0002_add_users.sql (no DROP TABLE users)
 - [ ] M3 (WARN) — No live schema to compare against migrations.
 - [ ] E1 (FAIL) — Key drift: REDIS_URL only in ['prod.env']; Suspicious prod values: LOG_LEVEL=debug
-- [ ] E2 (FAIL) — Secrets in config: prod.env: DATABASE_URL=postgres://***:***@ssw0rd!@prod-db:5432/orders; staging.env: DATABASE_URL=postgres://***:***@staging-db:5432/orders
+- [ ] E2 (FAIL) — Secrets in config: prod.env: DATABASE_URL=postgres://***:***@prod-db:5432/orders
 - [ ] E3 (WARN) — Environment variables not documented in a .env.example.
 
 ## Auto-generated release artifacts

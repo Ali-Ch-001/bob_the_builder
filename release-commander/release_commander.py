@@ -17,9 +17,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
-import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,7 +29,7 @@ REPORTS = ROOT / "reports"
 SECRET_PATTERNS = [
     re.compile(r"(password|passwd|pwd)\s*=\s*\S+", re.IGNORECASE),
     re.compile(r"(api[_-]?key|secret|token)\s*=\s*\S+", re.IGNORECASE),
-    re.compile(r"(DATABASE_URL|REDIS_URL)\s*=\s*\S+://[^:\s]+:[^@\s]+@", re.IGNORECASE),
+    re.compile(r"(DATABASE_URL|REDIS_URL)\s*=\s*\S+://[^:$\s]+:[^@$\s]+@", re.IGNORECASE),
     re.compile(r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 ]
 
@@ -38,6 +38,19 @@ EXCLUDE_DIRS = {".git", "__pycache__", ".venv", "venv", ".pytest_cache", "node_m
 
 def redact(text: str) -> str:
     return re.sub(r"://[^:\s]+:[^@\s]+@", "://***:***@", text)
+
+
+def clean_test_output(output: str) -> str:
+    keep = []
+    for line in output.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if re.search(r"warning", s, re.IGNORECASE):
+            continue
+        if re.search(r"FAILED|passed|failed|assert|Error|error|ERROR", s):
+            keep.append(s)
+    return "\n".join(keep[-6:])
 
 
 def iter_files(repo: Path):
@@ -99,20 +112,34 @@ def security_sentinel(repo: Path):
 def test_marshal(repo: Path):
     out = []
     # T1 — run test suite
-    cmd = [sys.executable, "-m", "pytest", "-q"]
-    try:
-        proc = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=120)
-        if proc.returncode == 0:
+    exe = shutil.which("pytest")
+    cmds = [([exe, "-q"] if exe else None), [sys.executable, "-m", "pytest", "-q"]]
+    result = None
+    for cmd in cmds:
+        if cmd is None:
+            continue
+        try:
+            proc = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=120)
+        except FileNotFoundError:
+            continue
+        output = proc.stdout + proc.stderr
+        if "No module named" in output:
+            continue
+        result = (proc.returncode, output)
+        break
+    if result is None:
+        out.append({"item": "T1", "status": "WARN",
+                    "finding": "pytest not installed in this environment; static check only.",
+                    "fix": "Install dev dependencies and re-run"})
+    else:
+        rc, output = result
+        if rc == 0:
             out.append({"item": "T1", "status": "PASS",
                         "finding": "Test suite passed.", "fix": "none"})
         else:
-            tail = "\n".join((proc.stdout + proc.stderr).splitlines()[-8:])
+            tail = clean_test_output(output)
             out.append({"item": "T1", "status": "FAIL",
                         "finding": f"Test suite failed:\n{tail}", "fix": "Fix failing test(s)"})
-    except FileNotFoundError:
-        out.append({"item": "T1", "status": "WARN",
-                    "finding": "pytest not available in this environment; static check skipped.",
-                    "fix": "none"})
     # T2 — flakiness (single run here)
     out.append({"item": "T2", "status": "WARN",
                 "finding": "Single run performed; re-run twice to confirm stability.",

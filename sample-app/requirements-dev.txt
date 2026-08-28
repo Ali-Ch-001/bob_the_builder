@@ -1,0 +1,6 @@
+# Dev / test dependencies for the reference Release Commander pipeline.
+# Install:  pip install -r requirements-dev.txt
+fastapi
+pydantic
+httpx
+pytest
