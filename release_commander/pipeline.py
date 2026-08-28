@@ -16,11 +16,18 @@ from pathlib import Path
 SECRET_PATTERNS = [
     re.compile(r"(password|passwd|pwd)\s*=\s*\S+", re.IGNORECASE),
     re.compile(r"(api[_-]?key|secret|token)\s*=\s*\S+", re.IGNORECASE),
-    re.compile(r"(DATABASE_URL|REDIS_URL)\s*=\s*\S+://[^:$\s]+:[^@$\s]+@", re.IGNORECASE),
+    re.compile(
+        r"(DATABASE_URL|REDIS_URL)\s*=\s*\S+://"
+        r"[^:$\s]*[A-Za-z0-9][^:$\s]*:[^@$\s]*[A-Za-z0-9][^@$\s]*@",
+        re.IGNORECASE),
     re.compile(r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 ]
 
 EXCLUDE_DIRS = {".git", "__pycache__", ".venv", "venv", ".pytest_cache", "node_modules"}
+
+# Files this tool itself generates must never be scanned as source (avoids the
+# scanner flagging its own redacted output).
+GENERATED_RE = re.compile(r"^(release-readiness|release-notes|rollback-runbook)-.*\.(md|json)$")
 
 
 def redact(text: str) -> str:
@@ -45,6 +52,8 @@ def iter_files(repo: Path):
         if not p.is_file():
             continue
         if any(part in EXCLUDE_DIRS for part in p.parts):
+            continue
+        if GENERATED_RE.match(p.name):
             continue
         yield p
 

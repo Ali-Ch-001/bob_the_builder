@@ -19,20 +19,20 @@
 
 ## 0:50–2:20 — Live demo (90s)
 
-### Step 1 — One-click install (0:50–1:00, 10s)
+### Step 1 — Install (0:50–1:00, 10s)
 
 Show the one command that gets everything:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Ali-Ch-001/bob_the_builder/main/install.sh)
+pip install .        # or:  bin/release-commander --help  (no install)
 ```
 
-"Installs in 10 seconds. No clone, no setup."
+"Installs in seconds. Now it's a command on your PATH."
 
 ### Step 2 — Diagnose: NO-GO (1:00–1:30, 30s)
 
 ```bash
-release-commander --repo sample-app
+release-commander --repo ./demo-repo
 ```
 
 Show the terminal output:
@@ -51,7 +51,7 @@ Call out five seeded defects Bob caught:
 ### Step 3 — Auto-fix: GO (1:30–1:55, 25s)
 
 ```bash
-release-commander --repo sample-app --fix
+release-commander --repo ./demo-repo --fix
 ```
 
 Show:
@@ -65,12 +65,12 @@ Fixes applied: 8
 
 ### Step 4 — Artifacts (1:55–2:20, 25s)
 
-Open `release-commander/reports/`:
-- `release-readiness-sample-app.md` — the full report
-- `release-notes-sample-app.md` — auto-generated release notes
-- `rollback-runbook-sample-app.md` — undo runbook for every migration and config change
+Open the output directory `release-commander-reports/`:
+- `release-readiness-<repo>.md` — the full report
+- `release-notes-<repo>.md` — auto-generated release notes
+- `rollback-runbook-<repo>.md` — undo runbook for every migration and config change
 
-"Four artifacts written. Normally hand-written. Now done."
+"Release artifacts written. Normally hand-written. Now done."
 
 ## 2:20–2:40 — Impact (20s)
 

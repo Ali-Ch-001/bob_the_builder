@@ -76,3 +76,18 @@ def test_fix_flips_verdict_to_go(tmp_path):
     n_pass, n_warn, n_fail, go = verdict(after)
     assert n_fail == 0
     assert go is True
+
+
+def test_generated_reports_are_not_scanned_as_source(tmp_path):
+    from release_commander.pipeline import iter_files
+
+    repo = tmp_path / "r"
+    repo.mkdir()
+    (repo / "release-readiness-r.md").write_text(
+        "DATABASE_URL=postgres://user:pass@host:5432/db")
+    (repo / "release-notes-r.md").write_text("password=secret")
+    (repo / "real.py").write_text("x = 1")
+    names = {p.name for p in iter_files(repo)}
+    assert "release-readiness-r.md" not in names
+    assert "release-notes-r.md" not in names
+    assert "real.py" in names

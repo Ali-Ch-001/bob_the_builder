@@ -47,8 +47,8 @@ autonomously, in parallel.
 
 ## Proven end-to-end results
 
-Tested against `sample-app`, a FastAPI service seeded with 8 intentional release
-defects:
+Tested against a seeded FastAPI sample repository (8 intentional release
+defects):
 
 | Stage | Verdict | Score |
 |---|---|---|
@@ -56,7 +56,7 @@ defects:
 | Auto-fix + re-evaluate | **GO** | 10/18 PASS · 0 FAIL · 8 fixes applied |
 | Artifacts generated | ✓ | release notes + rollback runbook |
 
-4/4 tests pass (`python -m pytest release-commander/tests/ -v`).
+The pipeline test suite passes (`python -m pytest tests/ -v`).
 
 ## Why it is creative and unique
 
