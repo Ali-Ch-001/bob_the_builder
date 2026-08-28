@@ -1,0 +1,18 @@
+[project]
+name = "acme-orders"
+version = "1.2.0"
+description = "Acme Orders — a minimal FastAPI reference service for Release Commander"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
