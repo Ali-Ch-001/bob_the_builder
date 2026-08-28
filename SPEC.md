@@ -62,7 +62,8 @@ subagent invocation.
 - E3 — Feature flags / environment variables are documented
 
 Each item has one of three statuses in the report: `PASS`, `WARN`, or `FAIL`.
-A release is **GO** only if zero items are `FAIL` and at most two are `WARN`.
+A release is **GO** only if zero items are `FAIL`; `WARN` items are non-blocking
+advisories that a human may choose to act on.
 
 ## 4. Repository layout
 
@@ -132,7 +133,7 @@ Structure (matches `report-template.md`):
 
 ## 8. Verdict rules
 
-- `GO` when 0 FAIL and <= 2 WARN.
+- `GO` when 0 FAIL (WARN items are non-blocking advisories).
 - `NO-GO` otherwise. The report must always explain what a human must do to flip to GO.
 
 ## 9. Non-negotiables

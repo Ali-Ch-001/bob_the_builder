@@ -35,5 +35,5 @@ parallel subagents.
 
 ## Verdict
 
-- **GO** — 0 `FAIL` and ≤ 2 `WARN`
-- **NO-GO** — any `FAIL`, or > 2 `WARN`
+- **GO** — 0 `FAIL` (WARN items are non-blocking advisories)
+- **NO-GO** — any `FAIL`
