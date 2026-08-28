@@ -127,9 +127,14 @@ def test_marshal(repo: Path):
         if rc == 0:
             out.append({"item": "T1", "status": "PASS",
                         "finding": "Test suite passed.", "fix": "none"})
+        elif rc == 5:
+            out.append({"item": "T1", "status": "WARN",
+                        "finding": "pytest collected no tests (no test files found).",
+                        "fix": "Add tests or use the appropriate test runner"})
         else:
+            tail = clean_test_output(output) or "\n".join(output.splitlines()[-6:])
             out.append({"item": "T1", "status": "FAIL",
-                        "finding": f"Test suite failed:\n{clean_test_output(output)}",
+                        "finding": f"Test suite failed:\n{tail}",
                         "fix": "Fix failing test(s)"})
     out.append({"item": "T2", "status": "WARN",
                 "finding": "Single run performed; re-run twice to confirm stability.",
@@ -156,14 +161,28 @@ def version_changelog_clerk(repo: Path):
         m2 = re.search(r"^##\s+\[?[0-9]+\.[0-9]+\.[0-9]+[^\n]*\n(.*?)(?=^##\s|\Z)",
                        text, re.M | re.S)
         top_entry = m2.group(1) if m2 else text
-    if py_ver and top and py_ver != top:
-        out.append({"item": "V1", "status": "FAIL",
-                    "finding": f"Version mismatch: pyproject={py_ver} vs CHANGELOG={top}",
-                    "fix": f"Bump pyproject.toml to {top}"})
+    if py_ver and top:
+        if py_ver != top:
+            out.append({"item": "V1", "status": "FAIL",
+                        "finding": f"Version mismatch: pyproject={py_ver} vs CHANGELOG={top}",
+                        "fix": f"Bump pyproject.toml to {top}"})
+        else:
+            out.append({"item": "V1", "status": "PASS",
+                        "finding": f"Version consistent ({py_ver}).", "fix": "none"})
+    elif py_ver or top:
+        out.append({"item": "V1", "status": "WARN",
+                    "finding": f"Partial version info: pyproject={py_ver}, CHANGELOG={top}.",
+                    "fix": "Add the missing version"})
     else:
-        out.append({"item": "V1", "status": "PASS",
-                    "finding": f"Version consistent ({py_ver}).", "fix": "none"})
-    if top and re.search(r"pending|unreleased|TBD|todo|wip", top_entry, re.IGNORECASE):
+        out.append({"item": "V1", "status": "WARN",
+                    "finding": "No version information found (no pyproject.toml / CHANGELOG.md).",
+                    "fix": "Add a version to pyproject.toml or CHANGELOG.md"})
+
+    if not cl.exists():
+        out.append({"item": "V2", "status": "WARN",
+                    "finding": "No CHANGELOG.md found.",
+                    "fix": "Add a CHANGELOG.md"})
+    elif top and re.search(r"pending|unreleased|TBD|todo|wip", top_entry, re.IGNORECASE):
         out.append({"item": "V2", "status": "FAIL",
                     "finding": f"CHANGELOG entry for {top} is a placeholder (no real notes).",
                     "fix": f"Write real change notes for {top}"})
@@ -358,6 +377,14 @@ def apply_fixes(repo: Path, results):
         cl.write_text(text)
         applied.append("V2 — replaced placeholder CHANGELOG entry with release notes")
 
+    if "D1" in fails:
+        readme = repo / "README.md"
+        if readme.exists():
+            text = readme.read_text(errors="ignore")
+            text = text.replace("uvicorn main:app", "uvicorn app.main:app")
+            readme.write_text(text)
+            applied.append("D1 — updated README quickstart command")
+
     if "S2" in fails or "E2" in fails:
         for envfile in sorted((repo / "config").glob("*.env")):
             text = envfile.read_text(errors="ignore")
@@ -425,7 +452,8 @@ def apply_fixes(repo: Path, results):
 def generate_artifacts(repo: Path, release_ref: str, slug: str, outdir: Path):
     """Generate release notes and a rollback runbook from the fixed repo."""
     outdir.mkdir(parents=True, exist_ok=True)
-    changelog = (repo / "CHANGELOG.md").read_text(errors="ignore")
+    cl = repo / "CHANGELOG.md"
+    changelog = cl.read_text(errors="ignore") if cl.exists() else ""
     top = re.search(r"^##\s+\[?([0-9]+\.[0-9]+\.[0-9]+)[^\n]*\n(.*?)(?=^##\s|\Z)",
                     changelog, re.M | re.S)
     notes = top.group(2).strip() if top else "(no changelog entry)"
