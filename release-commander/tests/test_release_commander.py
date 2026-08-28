@@ -78,10 +78,10 @@ def test_report_verdict_reflects_state(sample_copy):
     assert "**GO**" in md2
 
 
-def test_artifacts_generated_when_go(sample_copy):
+def test_artifacts_generated_when_go(sample_copy, tmp_path):
     before = run_personas(sample_copy)
     rc.apply_fixes(sample_copy, before)
     notes, runbook = rc.generate_artifacts(sample_copy, "1.3.0",
-                                           sample_copy.name, RC_DIR / "reports")
+                                           sample_copy.name, tmp_path)
     assert notes.exists() and runbook.exists()
     assert "Rollback Runbook" in runbook.read_text()
