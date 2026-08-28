@@ -7,29 +7,32 @@ hackathon asked us to demonstrate.
 ## Agent mode (orchestrator)
 
 The top-level Bob agent runs in **Agent mode** as the Release Commander
-orchestrator. Its task is defined in `release-commander/orchestrator.md`. It is
-prompted to act as a *conductor, not a doer*: it plans the release, delegates all
-six readiness domains, and is the single point of accountability for the GO /
-NO-GO decision. It never inlines the six workstreams — it delegates them.
+orchestrator. Its task is defined in [`release-commander/orchestrator.md`](../release-commander/orchestrator.md).
+It is prompted to act as a *conductor, not a doer*: it plans the release,
+delegates all six readiness domains, and is the single point of accountability
+for the GO / NO-GO decision. It never inlines the six workstreams — it spawns
+and delegates them.
 
-## Parallel tasks
+## Parallel tasks (spawn_subagent)
 
 The six readiness domains are independent, so the orchestrator runs them
-**simultaneously** rather than sequentially. This is the core efficiency win: a
-release check that would take a human a full day of serial effort is compressed
-to the wall-clock time of the single slowest subagent.
+**simultaneously** rather than sequentially using Bob's `spawn_subagent` tool.
+This is the core efficiency win: a release check that would take a human a full
+day of serial effort is compressed to the wall-clock time of the single slowest
+subagent.
 
-## Subagents
+## Six named subagents
 
-We defined six named subagents, each with a focused role file under
-`release-commander/subagents/`:
+Each subagent has a focused role file under [`release-commander/subagents/`](../release-commander/subagents/):
 
-1. `security-sentinel.md` — S1/S2/S3 (CVEs, secrets, licenses)
-2. `test-marshal.md` — T1/T2/T3 (tests, flakiness, coverage)
-3. `version-changelog-clerk.md` — V1/V2/V3 (semver, changelog, tags)
-4. `docs-curator.md` — D1/D2/D3 (docs freshness)
-5. `migration-auditor.md` — M1/M2/M3 (migration order/reversibility)
-6. `env-drift-checker.md` — E1/E2/E3 (config drift, secrets)
+| Role file | Checklist items | Domain |
+|---|---|---|
+| `security-sentinel.md` | S1 / S2 / S3 | CVEs, secrets, licenses |
+| `test-marshal.md` | T1 / T2 / T3 | tests, flakiness, coverage |
+| `version-changelog-clerk.md` | V1 / V2 / V3 | semver, changelog, tags |
+| `docs-curator.md` | D1 / D2 / D3 | docs freshness, accuracy |
+| `migration-auditor.md` | M1 / M2 / M3 | migration order, reversibility |
+| `env-drift-checker.md` | E1 / E2 / E3 | config drift, secrets |
 
 Each subagent owns exactly three checklist items, reports evidence with file +
 line references, applies safe fixes, and explicitly stays in its lane.
@@ -44,15 +47,44 @@ non-reversible migrations that a keyword search would miss.
 ## Synthesis & reporting
 
 Bob merges the six subagent reports into a single Release Readiness Report using
-`release-commander/report-template.md`, applies the verdict rule (GO iff 0 FAIL
-and ≤ 2 WARN), and auto-generates four release artifacts.
+[`release-commander/report-template.md`](../release-commander/report-template.md),
+applies the verdict rule (GO iff 0 FAIL), and auto-generates four release
+artifacts (bumped version, changelog entry, release notes, rollback runbook).
+
+## Shell skill — one-click install
+
+The workflow ships as a directly executable Python script with a proper
+`#!/usr/bin/env python3` shebang, and a Bash installer (`install.sh`) that
+creates a `release-commander` shell command via a symlink. Anyone can install
+and use it without cloning or manually configuring paths:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Ali-Ch-001/bob_the_builder/main/install.sh)
+```
+
+This means Release Commander works as a reusable **shell skill** — run it
+against any repo, any team, any cadence.
 
 ## Reference implementation
 
-We also ship `release-commander/release_commander.py`, a stdlib-only Python
-orchestrator that emulates the same 18 checks so the proof-of-concept runs even
-without a live Bob session. In the live run, each check is replaced by a real Bob
-subagent — the checklist, verdict logic, and report format are identical.
+[`release-commander/release_commander.py`](../release-commander/release_commander.py) is a
+stdlib-only Python orchestrator that emulates the same 18 checks so the
+proof-of-concept runs without a live Bob session. In the live run, each check is
+replaced by a real Bob subagent — the checklist, verdict logic, and report
+format are identical.
+
+## Verified results
+
+```
+python -m pytest release-commander/tests/ -v
+```
+
+```
+test_detects_all_seeded_defects      PASSED   # every defect caught → NO-GO
+test_fix_flips_verdict_to_go         PASSED   # auto-fixes flip to GO
+test_report_verdict_reflects_state   PASSED   # markdown report matches state
+test_artifacts_generated_when_go     PASSED   # release notes + runbook written
+```
 
 ## Bobcoins budget
 
